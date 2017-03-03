@@ -632,3 +632,15 @@ int rdsk_flush(struct RD_PROFILE *rd_prof, RC_PROFILE *rc_prof, unsigned char *s
 
 	return SUCCESS;
 }
+
+int lock_device(unsigned char *string)
+{
+	/* equivalent to: blockdev --setro /dev/sdb */
+	return SUCCESS;
+}
+
+int unlock_device(unsigned char *string)
+{
+	/* equivalent to: blockdev --setrw /dev/sdb */
+	return SUCCESS;
+}

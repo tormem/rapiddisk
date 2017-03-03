@@ -4,7 +4,7 @@ rapiddisk \- An administration tool to manage the RapidDisk RAM disk devices and
 .SH SYNOPSIS
 rapiddisk [ -h | -v ] function [ parameters: unit | size | src & dest | cache & source | mode ]
 .SH DESCRIPTION
-rapiddisk is a RapidDisk module management tool. The tool allows the user to list all attached RapidDisk devices, with the ability to dynamically attach a new RapidDisk block devices and detach existing ones. It also is capable of mapping and unmapping an RapidDisk volumes as a Write-Through or Write Around cache to any block device via the RapidDisk-Cache kernel module.
+rapiddisk is a RapidDisk module management tool. The tool allows the user to list all attached RapidDisk devices, with the ability to dynamically attach a new RapidDisk block devices and detach existing ones. It also is capable of mapping and unmapping an RapidDisk volumes as a Write-Through or Write Around cache to any block device via the RapidDisk-Cache kernel module. With RapidDisk-Cache, configure transient volume mappings from a read-only device.
 .SS Options
 .TP
 -h | --help
@@ -58,6 +58,13 @@ Activate an encryption volume. Please store user defined keys in /etc/rapiddisk/
 .TP
 --deactivate-crypt
 Deactivate an encrypted volume (only if enabled during compilation).
+.TP
+--lock-device
+Set block device to read-only mode.
+.TP
+--unlock-device
+Set block device to read-write mode.
+.TP
 .SS Parameters (if applicable)
 .TP
 [size]
@@ -79,7 +86,7 @@ Specify RapidDisk node to use as caching volume.
 Specify block device to map cache to.
 .TP
 [mode]
-Write Through (wt) or Write Around (wa) for cache.
+Write Through (wt), Write Around (wa) or Protected (ro) for cache.
 .SH EXAMPLE USAGE
 .TP
 rapiddisk --list
@@ -100,6 +107,8 @@ rapiddisk --cache-map rd1 /dev/sdb
 .TP
 rapiddisk --cache-map rd1 /dev/sdb wt
 .TP
+rapiddisk --cache-map rd1 /dev/sdb ro
+.TP
 rapiddisk --cache-unmap rc_sdb
 .TP
 rapiddisk --stat-cache rc_sdb
@@ -111,6 +120,10 @@ rapiddisk --enable-crypt /dev/rd0
 rapiddisk --activate-crypt /dev/rd0
 .TP
 rapiddisk --deactivate-crypt /dev/mapper/crypt-rd0
+.TP
+rapiddisk --lock-device /dev/sdb
+.TP
+rapiddisk --unlock-device /dev/sdb
 .SH EXIT STATUS
 rapiddisk returns a zero exit status if no error occurs during operation. A non-zero value is returned on error.
 .SH AUTHORS

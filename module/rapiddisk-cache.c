@@ -68,6 +68,7 @@
 
 #define WRITETHROUGH	0
 #define WRITEAROUND	1
+#define PROTECTED	2
 
 #define GENERIC_ERROR		-1
 #define BYTES_PER_BLOCK		512
@@ -105,7 +106,7 @@ struct cache_context {
 	struct cache_block *cache;
 	u8 *cache_state;
 	u32 *set_lru_next;
-	int mode;			/* Write Through / Around */
+	int mode;			/* Write Through / Around or Protected */
 
 	struct dm_io_client *io_client;
 	sector_t size;

@@ -46,6 +46,8 @@ int stat_cache_mapping(struct RC_PROFILE *, unsigned char *);
 int rdsk_flush(struct RD_PROFILE *, RC_PROFILE *, unsigned char *);
 int archive_rd_volume(struct RD_PROFILE *, unsigned char *, unsigned char *);
 int restore_rd_volume(struct RD_PROFILE *, unsigned char *, unsigned char *);
+int lock_device(unsigned char *);
+int unlock_device(unsigned char *);
 #if !defined NO_CRYPT
 int format_crypt(unsigned char *);
 int activate_crypt(unsigned char *);
@@ -82,10 +84,11 @@ void online_menu(char *string)
 #if !defined NO_CRYPT
 	       "\t--enable-crypt\t\tInitialize a storage volume for data encryption.\n"
 	       "\t--activate-crypt\tActivate an encryption volume.\n"
-	       "\t--deactivate-crypt\tDeactivate an encryption volume.\n\n");
-#else
-	       "\n");
+	       "\t--deactivate-crypt\tDeactivate an encryption volume.\n"
 #endif
+	       "\t--lock-device\t\tSet block device to read-only mode.\n"
+	       "\t--unlock-device\t\tSet block device to read-write mode.\n"
+	       "\n");
 	printf("Parameters:\n"
 	       "\t[size]\t\t\tSpecify desired size of attaching RAM disk device in MBytes.\n"
 	       "\t[unit]\t\t\tSpecify unit number of RAM disk device to detach.\n"
@@ -93,7 +96,7 @@ void online_menu(char *string)
 	       "\t[dest]\t\t\tDestination path for arcive/restore options.\n"
 	       "\t[cache]\t\t\tSpecify RapidDisk node to use as caching volume.\n"
 	       "\t[source]\t\tSpecify block device to map cache to.\n"
-	       "\t[mode]\t\t\tWrite Through (wt) or Write Around (wa) for cache.\n\n");
+	       "\t[mode]\t\t\tWrite Through (wt), Write Around (wa) or Protected (ro) for cache.\n\n");
 	printf("Example Usage:\n\trapiddisk --attach 64\n"
 	       "\trapiddisk --detach rd2\n"
 	       "\trapiddisk --resize rd2 128\n"
@@ -101,114 +104,121 @@ void online_menu(char *string)
 	       "\trapiddisk --restore rd-052911.dat rd0\n"
 	       "\trapiddisk --cache-map rd1 /dev/sdb\n"
 	       "\trapiddisk --cache-map rd1 /dev/sdb wt\n"
+	       "\trapiddisk --cache-map rd1 /dev/sdb ro\n"
 	       "\trapiddisk --cache-unmap rc_sdb\n"
 	       "\trapiddisk --flush rd2\n"
 #if !defined NO_CRYPT
 	       "\trapiddisk --enable-crypt /dev/rd0\n"
 	       "\trapiddisk --activate-crypt /dev/rd0\n"
-	       "\trapiddisk --deactivate-crypt /dev/mapper/crypt-rd0\n\n");
-#else
-	       "\n");
+	       "\trapiddisk --deactivate-crypt /dev/mapper/crypt-rd0\n"
 #endif
+	       "\trapiddisk --lock-device /dev/sdb\n"
+	       "\trapiddisk --unlock-device /dev/sdb\n\n");
 }
 
 int parse_input(int argcin, char *argvin[])
 {
-	int err = 0, mode = WRITETHROUGH;
-	struct RD_PROFILE *rd;	 /* These are dummy pointers to  */
-	struct RC_PROFILE *rc;	 /* help create the linked  list */
+	int rc = INVALID_VALUE, mode = WRITETHROUGH;
+	struct RD_PROFILE *disk;
+	struct RC_PROFILE *cache;
 
 	printf("%s %s\n%s\n\n", UTIL, VERSION_NUM, COPYRIGHT);
 	if ((argcin < 2) || (argcin > 5)) {
 		online_menu(argvin[0]);
-		return err;
+		return SUCCESS;
 	}
 
 	if (((strcmp(argvin[1], "-h")) == 0) || ((strcmp(argvin[1],"-H")) == 0) ||
 	    ((strcmp(argvin[1], "--help")) == 0)) {
 		online_menu(argvin[0]);
-		return err;
+		return SUCCESS;
 	}
 	if (((strcmp(argvin[1], "-v")) == 0) || ((strcmp(argvin[1],"-V")) == 0) ||
 	    ((strcmp(argvin[1], "--version")) == 0)) {
-		return err;
+		return SUCCESS;
 	}
 
-	rd = (struct RD_PROFILE *)search_targets();
-	rc = (struct RC_PROFILE *)search_cache();
+	disk = (struct RD_PROFILE *)search_targets();
+	cache = (struct RC_PROFILE *)search_cache();
 
 	if (strcmp(argvin[1], "--list") == 0) {
-		if (rd == NULL)
+		if (disk == NULL)
 			printf("Unable to locate any RapidDisk devices.\n");
 		else
-			err = list_devices(rd, rc);
+			rc = list_devices(disk, cache);
 		goto out;
 #if !defined NO_JANSSON
 	} else if (strcmp(argvin[1], "--list-json") == 0) {
-		err = list_devices_json(rd, rc);
+		rc = list_devices_json(disk, cache);
 		goto out;
 #endif
 	} else if (strcmp(argvin[1], "--short-list") == 0) {
-		if (rd == NULL)
+		if (disk == NULL)
 			printf("Unable to locate any RapidDisk devices.\n");
 		else
-			err = short_list_devices(rd, rc);
+			rc = short_list_devices(disk, cache);
 		goto out;
 	}
 
 	if (strcmp(argvin[1], "--attach") == 0) {
 		if (argcin != 3) goto invalid_out;
-		err = attach_device(rd, strtoul(argvin[2], (char **)NULL, 10));
+		rc = attach_device(disk, strtoul(argvin[2], (char **)NULL, 10));
 	} else if (strcmp(argvin[1], "--detach") == 0) {
 		if (argcin != 3) goto invalid_out;
-		if (rd == NULL)
+		if (disk == NULL)
 			printf("Unable to locate any RapidDisk devices.\n");
 		else
-			err = detach_device(rd, rc, argvin[2]);
+			rc = detach_device(disk, cache, argvin[2]);
 	} else if (strcmp(argvin[1], "--resize") == 0) {
 		if (argcin != 4) goto invalid_out;
-		if (rd == NULL)
+		if (disk == NULL)
 			printf("Unable to locate any RapidDisk devices.\n");
 		else
-			err = resize_device(rd, argvin[2], strtoul(argvin[3], (char **)NULL, 10));
+			rc = resize_device(disk, argvin[2], strtoul(argvin[3], (char **)NULL, 10));
 	} else if (strcmp(argvin[1], "--archive") == 0) {
 		if (argcin != 4) goto invalid_out;
-		err = archive_rd_volume(rd, argvin[2], argvin[3]);
+		rc = archive_rd_volume(disk, argvin[2], argvin[3]);
 	} else if (strcmp(argvin[1], "--restore") == 0) {
 		if (argcin != 4) goto invalid_out;
-		err = restore_rd_volume(rd, argvin[2], argvin[3]);
+		rc = restore_rd_volume(disk, argvin[2], argvin[3]);
 	} else if (strcmp(argvin[1], "--cache-map") == 0) {
 		if ((argcin < 4) || (argcin > 5)) goto invalid_out;
 		if (argcin == 5)
 			if (strcmp(argvin[4], "wa") == 0)
 				mode = WRITEAROUND;
-		err = cache_map(rd, rc, argvin[2], argvin[3], mode);
+		rc = cache_map(disk, cache, argvin[2], argvin[3], mode);
 	} else if (strcmp(argvin[1], "--cache-unmap") == 0) {
 		if (argcin != 3) goto invalid_out;
-		err = cache_unmap(rc, argvin[2]);
+		rc = cache_unmap(cache, argvin[2]);
 	} else if (strcmp(argvin[1], "--flush") == 0) {
 		if (argcin != 3) goto invalid_out;
-		err = rdsk_flush(rd, rc, argvin[2]);
+		rc = rdsk_flush(disk, cache, argvin[2]);
 	} else if (strcmp(argvin[1], "--stat-cache") == 0) {
 		if (argcin != 3) goto invalid_out;
-		err = stat_cache_mapping(rc, argvin[2]);
+		rc = stat_cache_mapping(cache, argvin[2]);
 #if !defined NO_CRYPT
 	} else if (strcmp(argvin[1], "--enable-crypt") == 0) {
 		if (argcin != 3) goto invalid_out;
-		err = format_crypt(argvin[2]);
+		rc = format_crypt(argvin[2]);
 	} else if (strcmp(argvin[1], "--activate-crypt") == 0) {
 		if (argcin != 3) goto invalid_out;
-		err = activate_crypt(argvin[2]);
+		rc = activate_crypt(argvin[2]);
 	} else if (strcmp(argvin[1], "--deactivate-crypt") == 0) {
 		if (argcin != 3) goto invalid_out;
-		err = deactivate_crypt(argvin[2]);
+		rc = deactivate_crypt(argvin[2]);
 #endif
+	} else if (strcmp(argvin[1], "--lock-device") == 0) {
+		if (argcin != 3) goto invalid_out;
+		rc = lock_device(argvin[2]);
+	} else if (strcmp(argvin[1], "--unlock-device") == 0) {
+		if (argcin != 3) goto invalid_out;
+		rc = unlock_device(argvin[2]);
 	} else {
 		goto invalid_out;
 	}
 
 out:
-	return err;
+	return rc;
 invalid_out:
 	printf("Error. Invalid argument(s) entered.\n");
 	return -EINVAL;
@@ -216,7 +226,7 @@ invalid_out:
 
 int main(int argc, char *argv[])
 {
-	int err = 0;
+	int rc = 0;
 	FILE *fp;
 	unsigned char string[BUFSZ];
 
@@ -249,6 +259,6 @@ int main(int argc, char *argv[])
 		return -EPERM;
 	}
 
-	err = parse_input(argc, argv);
-	return err;
+	rc = parse_input(argc, argv);
+	return rc;
 }
