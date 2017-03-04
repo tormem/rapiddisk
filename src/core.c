@@ -500,6 +500,13 @@ int cache_map(struct RD_PROFILE *rd_prof, struct RC_PROFILE * rc_prof,
 		return -EIO;
 	}
 	close(fd);
+
+	if ((mode == PROTECTED) && (cache_sz < source_sz)) {
+		printf("Error. The RapidDisk volume needs to be larger or equal to the size " \
+		       "of the original volume.\n");
+		return -INVALID_VALUE;
+	}
+
 	memset(name, 0x0, sizeof(name));
 
 	dup = strdup(source);
@@ -510,6 +517,8 @@ int cache_map(struct RD_PROFILE *rd_prof, struct RC_PROFILE * rc_prof,
 	}
 	if (mode == WRITETHROUGH)
 		sprintf(name, "rc-wt_%s", str);
+	if (mode == PROTECTED)
+		sprintf(name, "rc-ro_%s", str);
 	else
 		sprintf(name, "rc-wa_%s", str);
 
@@ -633,14 +642,26 @@ int rdsk_flush(struct RD_PROFILE *rd_prof, RC_PROFILE *rc_prof, unsigned char *s
 	return SUCCESS;
 }
 
-int lock_device(unsigned char *string)
+int lock_device(unsigned char *string, int lock)
 {
-	/* equivalent to: blockdev --setro /dev/sdb */
-	return SUCCESS;
-}
+	int fd, arg = INVALID_VALUE;
 
-int unlock_device(unsigned char *string)
-{
-	/* equivalent to: blockdev --setrw /dev/sdb */
+	if ((fd = open(string, O_RDWR)) < 0) {
+		printf("%s: open: %s\n", __func__, strerror(errno));
+		return -ENOENT;
+	}
+
+	if (ioctl(fd, BLKROGET, &arg) == INVALID_VALUE){
+		printf("%s: ioctl: %s\n", __func__, strerror(errno));
+		return -EIO;
+	}
+	printf("Original setting: %s\n", ((arg) ? "Write-Read" : "Read-Only"));
+	arg = lock;
+	if (ioctl(fd, BLKROSET, &arg) == INVALID_VALUE){
+		printf("%s: ioctl: %s\n", __func__, strerror(errno));
+		return -EIO;
+	}
+	printf("New setting: %s\n", ((lock) ? "Write-Read" : "Read-Only"));
+	close(fd);
 	return SUCCESS;
 }

@@ -96,6 +96,12 @@
 #define COPY_PAGES (1024)
 #endif
 
+char *mode[] = {
+	"WRITETHROUGH",
+	"WRITE_AROUND",
+	"PROTECTED"
+};
+
 /* Cache context */
 struct cache_context {
 	struct dm_target *tgt;
@@ -772,14 +778,20 @@ static void cache_write(struct cache_context *dmc, struct bio *bio)
 #endif
 		return;
 	}
-	job->rw = WRITESOURCE;
 	atomic_inc(&job->dmc->nr_jobs);
 	dmc->disk_writes++;
+	if (dmc->mode != PROTECTED) {
+		job->rw = WRITESOURCE;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,14,0)
-	dm_io_async_bvec(1, &job->disk, WRITE, bio, rc_io_callback, job);
+		dm_io_async_bvec(1, &job->disk, WRITE, bio, rc_io_callback, job);
 #else
-	dm_io_async_bvec(1, &job->disk, WRITE, bio->bi_io_vec + bio->bi_idx, rc_io_callback, job);
+		dm_io_async_bvec(1, &job->disk, WRITE, bio->bi_io_vec + bio->bi_idx, rc_io_callback, job);
 #endif
+	} else {
+		job->rw = WRITECACHE;
+		push(&io_jobs, job);
+		queue_work(kcached_wq, &kcached_work);
+	}
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32)
@@ -983,7 +995,6 @@ static int cache_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		ti->error = "Failed to initialize kcached";
 		goto construct_fail4;
 	}
-	dmc->block_size = CACHE_BLOCK_SIZE;
 	dmc->block_shift = ffs(dmc->block_size) - 1;
 	dmc->block_mask = dmc->block_size - 1;
 
@@ -1005,6 +1016,12 @@ static int cache_ctr(struct dm_target *ti, unsigned int argc, char **argv)
                 }
 	} else {
 		dmc->mode = WRITETHROUGH;
+	}
+
+	if (dmc->mode == PROTECTED) {
+		dmc->block_size = 1;    /* 512 bytes */
+	} else {
+		dmc->block_size = CACHE_BLOCK_SIZE;
 	}
 
 	if (argc >= 5) {
@@ -1176,8 +1193,7 @@ static void rc_status_table(struct cache_context *dmc, status_type_t type,
 	DMEMIT("conf:\n\tRapidDisk dev (%s), disk dev (%s) mode (%s)\n"
 		"\tcapacity(%luM), associativity(%u), block size(%uK)\n"
 		"\ttotal blocks(%lu), cached blocks(%lu)\n",
-		dmc->cache_devname, dmc->disk_devname,
-		((dmc->mode) ? "WRITE_AROUND" : "WRITETHROUGH"),
+		dmc->cache_devname, dmc->disk_devname, mode[dmc->mode],
 		(unsigned long)dmc->size * dmc->block_size >> 11, dmc->assoc,
 		dmc->block_size >> (10 - SECTOR_SHIFT),
 		(unsigned long)dmc->size, dmc->cached_blocks);

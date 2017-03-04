@@ -46,8 +46,7 @@ int stat_cache_mapping(struct RC_PROFILE *, unsigned char *);
 int rdsk_flush(struct RD_PROFILE *, RC_PROFILE *, unsigned char *);
 int archive_rd_volume(struct RD_PROFILE *, unsigned char *, unsigned char *);
 int restore_rd_volume(struct RD_PROFILE *, unsigned char *, unsigned char *);
-int lock_device(unsigned char *);
-int unlock_device(unsigned char *);
+int lock_device(unsigned char *, int);
 #if !defined NO_CRYPT
 int format_crypt(unsigned char *);
 int activate_crypt(unsigned char *);
@@ -186,6 +185,8 @@ int parse_input(int argcin, char *argvin[])
 		if (argcin == 5)
 			if (strcmp(argvin[4], "wa") == 0)
 				mode = WRITEAROUND;
+			else if (strcmp(argvin[4], "ro") == 0)
+				mode = PROTECTED;
 		rc = cache_map(disk, cache, argvin[2], argvin[3], mode);
 	} else if (strcmp(argvin[1], "--cache-unmap") == 0) {
 		if (argcin != 3) goto invalid_out;
@@ -209,10 +210,10 @@ int parse_input(int argcin, char *argvin[])
 #endif
 	} else if (strcmp(argvin[1], "--lock-device") == 0) {
 		if (argcin != 3) goto invalid_out;
-		rc = lock_device(argvin[2]);
+		rc = lock_device(argvin[2], 1);
 	} else if (strcmp(argvin[1], "--unlock-device") == 0) {
 		if (argcin != 3) goto invalid_out;
-		rc = unlock_device(argvin[2]);
+		rc = lock_device(argvin[2], 0);
 	} else {
 		goto invalid_out;
 	}

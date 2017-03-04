@@ -52,6 +52,7 @@
 #define KEY_FILE		"/etc/rapiddisk/key"
 #define WRITETHROUGH		0
 #define WRITEAROUND		1
+#define PROTECTED		2
 #define INVALID_VALUE		-1
 
 typedef struct RD_PROFILE{	/* For RapidDisk device list     */
